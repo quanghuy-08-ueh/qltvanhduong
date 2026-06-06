@@ -482,11 +482,11 @@
 
         <!-- PRESETS CHO ĐỒ ÁN TRONG THẺ GOOGLE DOCS -->
         <div class="control-group" style="border-color: #38bdf8;">
-            <h2><i class="fa-solid fa-bolt"></i> MDX Queries</h2>
+            <h2><i class="fa-solid fa-bolt"></i> MDX Queries (Tính Toán Nâng Cao)</h2>
             <div class="preset-grid">
-                <button class="preset-btn" id="btn-4-1" onclick="applyPreset('4_1')"><i class="fa-solid fa-book-open"></i> 4.1. Tổng ngày mượn (Theo NXB, Thể loại)</button>
-                <button class="preset-btn" id="btn-4-2" onclick="applyPreset('4_2')"><i class="fa-solid fa-money-bill-wave"></i> 4.2. Số phiếu phạt & Tiền phạt (Theo NV, Thể loại)</button>
-                <button class="preset-btn" id="btn-4-3" onclick="applyPreset('4_3')"><i class="fa-solid fa-users-viewfinder"></i> 4.3. Tổng lượt mượn (Theo GT, Thể loại)</button>
+                <button class="preset-btn" id="btn-4-1" onclick="applyPreset('4_1')"><i class="fa-solid fa-book-open"></i> 4.1. TOP 10 NXB & Thể loại có Ngày mượn TB cao nhất</button>
+                <button class="preset-btn" id="btn-4-2" onclick="applyPreset('4_2')"><i class="fa-solid fa-money-bill-wave"></i> 4.2. TOP 10 NV & Thể loại bị Phạt nhiều nhất</button>
+                <button class="preset-btn" id="btn-4-3" onclick="applyPreset('4_3')"><i class="fa-solid fa-users-viewfinder"></i> 4.3. TOP 20 Thể loại mượn nhiều & Tỷ trọng % (Theo GT)</button>
             </div>
         </div>
 
@@ -1148,62 +1148,137 @@
 
             if (currentActivePreset === '4_1') {
                 mdxCode = `WITH
-  MEMBER [Tong So Ngay Muon] AS
-    SUM([Measures].[So Ngay Muon])
+MEMBER [Measures].[So Ngay Muon TB] AS
+    IIF(
+        [Measures].[Chi Tiet Muon Tra Count] = 0,
+        NULL,
+        [Measures].[So Ngay Muon]
+        /
+        [Measures].[Chi Tiet Muon Tra Count]
+    )
+
 SELECT
-  NON EMPTY
-    { [Tong So Ngay Muon] } ON COLUMNS,
-  NON EMPTY
-    (
-      [Ngay Muon].[Nam].&[${data.nameX}]
-      * [Quyen Sach].[Ten NXB].&[${data.nameY}]
-      * [Quyen Sach].[Ten The Loai].&[${data.nameZ}]
-    ) ON ROWS
-FROM
-(
-  SELECT
-    [Ngay Muon].[Nam].Children          ON PAGES,
-    [Quyen Sach].[Ten NXB].Children     ON ROWS,
-    [Quyen Sach].[Ten The Loai].Children ON COLUMNS
-  FROM [QLTV]
-);`;
+{
+    [Measures].[So Ngay Muon TB]
+} ON COLUMNS,
+
+GENERATE(
+    {
+        [Ngay Muon].[Nam].&[2024],
+        [Ngay Muon].[Nam].&[2025],
+        [Ngay Muon].[Nam].&[2026]
+    },
+
+    {
+        [Ngay Muon].[Nam].CurrentMember
+    }
+    *
+    TOPCOUNT(
+        NONEMPTY(
+            [Quyen Sach].[Ten NXB].Children
+            *
+            [Quyen Sach].[Ten The Loai].Children,
+            [Measures].[So Ngay Muon TB]
+        ),
+        10,
+        [Measures].[So Ngay Muon TB]
+    )
+) ON ROWS
+
+FROM [QLTV]`;
             } else if (currentActivePreset === '4_2') {
                 mdxCode = `WITH
-  MEMBER [Measures].[So Phieu Bi Phat] AS
-    DISTINCTCOUNT([Chi Tiet Muon Tra].[Ma Phieu].[Ma Phieu].MEMBERS)
-SELECT
-  NON EMPTY
-  {
-    [Measures].[So Phieu Bi Phat],
-    [Measures].[Tien Phat]
-  } ON COLUMNS,
-  NON EMPTY
-  CROSSJOIN(
-    {
-      [Ngay Muon].[Nam].&[${data.nameX}]
-    },
-    CROSSJOIN(
-      [Nhan Vien].[Ten NV].&[${data.nameY}],
-      [Quyen Sach].[Ten The Loai].&[${data.nameZ}]
+
+MEMBER [Measures].[So Phieu Bi Phat] AS
+    [Measures].[Chi Tiet Muon Tra Count]
+
+MEMBER [Measures].[Tien Phat TB] AS
+    IIF(
+        [Measures].[Chi Tiet Muon Tra Count] = 0,
+        NULL,
+        [Measures].[Tien Phat]
+        /
+        [Measures].[Chi Tiet Muon Tra Count]
     )
-  ) ON ROWS
+
+SELECT
+{
+    [Measures].[So Phieu Bi Phat],
+    [Measures].[Tien Phat],
+    [Measures].[Tien Phat TB]
+}
+ON COLUMNS,
+
+GENERATE(
+    {
+        [Ngay Tra Thuc Te].[Nam].&[2024],
+        [Ngay Tra Thuc Te].[Nam].&[2025],
+        [Ngay Tra Thuc Te].[Nam].&[2026]
+    },
+
+    {
+        [Ngay Tra Thuc Te].[Nam].CurrentMember
+    }
+    *
+    TOPCOUNT(
+        NONEMPTY(
+            [Nhan Vien].[Ten NV].Children
+            *
+            [Quyen Sach].[Ten The Loai].Children,
+            [Measures].[Tien Phat]
+        ),
+        10,
+        [Measures].[Tien Phat]
+    )
+)
+ON ROWS
+
 FROM [QLTV]`;
             } else if (currentActivePreset === '4_3') {
                 mdxCode = `WITH
-  MEMBER [Measures].[Tong Luot Muon] AS
-    DISTINCTCOUNT([Chi Tiet Muon Tra].[Ma Phieu].[Ma Phieu].MEMBERS)
+
+MEMBER [Measures].[Tong Luot Muon] AS
+    [Measures].[Chi Tiet Muon Tra Count]
+
+MEMBER [Measures].[Ty Trong Muon %] AS
+    IIF(
+        (
+            [Ban Doc].[Gioi Tinh].CurrentMember.Parent,
+            [Measures].[Chi Tiet Muon Tra Count]
+        ) = 0,
+        NULL,
+        [Measures].[Chi Tiet Muon Tra Count]
+        /
+        (
+            [Ban Doc].[Gioi Tinh].CurrentMember.Parent,
+            [Measures].[Chi Tiet Muon Tra Count]
+        ) * 100
+    )
+
 SELECT
-  { [Measures].[Tong Luot Muon] } ON COLUMNS,
-  NON EMPTY
-  (
-    { 
-      [Ngay Muon].[Nam].&[2024],
-      [Ngay Muon].[Nam].&[2025],
-      [Ngay Muon].[Nam].&[2026]
+{
+    [Measures].[Tong Luot Muon],
+    [Measures].[Ty Trong Muon %]
+} ON COLUMNS,
+
+NON EMPTY
+(
+    {
+        [Ngay Muon].[Nam].&[2024],
+        [Ngay Muon].[Nam].&[2025],
+        [Ngay Muon].[Nam].&[2026]
     }
-    * [Ban Doc].[Gioi Tinh].Children
-    * [Quyen Sach].[Ten The Loai].Children
-  ) ON ROWS
+    *
+    TOPCOUNT(
+        [Quyen Sach].[Ten The Loai].Children,
+        20,
+        [Measures].[Tong Luot Muon]
+    )
+    *
+    [Ban Doc].[Gioi Tinh].Children
+)
+ON ROWS
+
 FROM [QLTV]`;
             } else {
                 let sliceMDX = "";
